@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+
+  <!-- НАЗВАНИЕ ПРИЛОЖЕНИЯ -->
+  <title>VocZen</title>
+  <meta name="apple-mobile-web-app-title" content="VocZen">
+
+  <meta name="theme-color" content="#111111" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+
+    body {
+      margin:0;
+      font-family:-apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif;
+      background:#0b0b0c;
+      color:#fff;
+      -webkit-text-size-adjust:100%;
+    }
+
+    .page {
+      min-height:100svh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+    }
+
+    .wrap {
+      width:100%;
+      max-width:560px;
+    }
+
+    .card {
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:16px;
+      padding:16px;
+      backdrop-filter: blur(10px);
+    }
+
+    .word {
+      font-size:30px;
+      font-weight:700;
+      margin:10px 0 6px;
+      word-break: break-word;
+    }
+
+    .hint {
+      opacity:0.7;
+      font-size:13px;
+    }
+
+    .grid {
+      display:grid;
+      gap:10px;
+      margin-top:12px;
+    }
+
+    .btn {
+      appearance:none;
+      width:100%;
+      padding:12px 14px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,0.14);
+      background:rgba(255,255,255,0.08);
+      color:#fff;
+      font-size:16px;
+      text-align:left;
+      cursor:pointer;
+      user-select:none;
+      word-break: break-word;
+    }
+
+    .btn:active { transform:scale(0.99); }
+    .btn:disabled { opacity:0.6; }
+
+    .row {
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+
+    .smallbtn {
+      appearance:none;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.14);
+      background:rgba(255,255,255,0.08);
+      color:#fff;
+      font-size:14px;
+      cursor:pointer;
+    }
+
+    .danger {
+      border-color: rgba(255,0,0,0.35);
+    }
+
+    .msg {
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.10);
+      min-height:24px;
+      font-size:14px;
+      white-space:pre-wrap;
+    }
+
+    .msg.ok { border-color: rgba(0,255,0,0.3); }
+    .msg.bad { border-color: rgba(255,0,0,0.3); }
+
+    details {
+      margin-top:16px;
+    }
+
+    summary {
+      cursor:pointer;
+      opacity:0.85;
+    }
+
+    .taWrap {
+      margin-top:10px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.14);
+      background:rgba(0,0,0,0.25);
+      overflow:hidden;
+    }
+
+    textarea {
+      width:100%;
+      min-height:140px;
+      max-height:240px;
+      resize:vertical;
+      border:none;
+      background:transparent;
+      color:#fff;
+      padding:12px;
+      font-size:16px;
+      outline:none;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    textarea[readonly] {
+      opacity:0.85;
+    }
+  </style>
+</head>
+
+<body>
+<div class="page">
+  <div class="wrap">
+    <div class="card">
+
+      <div class="word" id="questionWord">—</div>
+      <div class="hint" id="hintText">Нажми «Новые слова» или добавь их в резерв</div>
+
+      <div class="grid" id="answers"></div>
+
+      <div class="msg" id="msgBox"></div>
+
+      <div class="row">
+        <button class="smallbtn" id="modeBtn">EN↔RU</button>
+        <button class="smallbtn" id="newBtn">Новые слова</button>
+        <button class="smallbtn" id="skipBtn">Пропустить</button>
+        <button class="smallbtn" id="repeatBtn">Повторить</button>
+      </div>
+
+      <details open>
+        <summary>Резерв <span id="vaultCount">(0)</span></summary>
+        <div class="taWrap">
+          <textarea id="vaultTextarea" spellcheck="false"></textarea>
+        </div>
+        <div class="row">
+          <button class="smallbtn" id="saveVaultBtn">Сохранить</button>
+        </div>
+      </details>
+
+      <details>
+        <summary>Выучено <span id="learnedCount">(0)</span></summary>
+        <div class="taWrap">
+          <textarea id="learnedTextarea" readonly></textarea>
+        </div>
+        <div class="row">
+          <button class="smallbtn danger" id="clearLearnedBtn">Очистить</button>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const LS_ACTIVE='vt_active_v7';
+  const LS_VAULT='vt_vault_v7';
+  const LS_LEARNED='vt_learned_v7';
+  const LS_MODE='vt_mode_v7';
+  const BATCH=10;
+
+  const load=k=>{try{return JSON.parse(localStorage.getItem(k)||'[]')}catch{return[]}};
+  const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+
+  let active=load(LS_ACTIVE);
+  let vault=load(LS_VAULT);
+  let learned=load(LS_LEARNED);
+  let mode=localStorage.getItem(LS_MODE)||'EN_RU';
+
+  let deck=[],pos=0,current=null;
+
+  const q=questionWord;
+  const h=hintText;
+  const a=answers;
+  const m=msgBox;
+  const tv=vaultTextarea;
+  const tl=learnedTextarea;
+  const cv=vaultCount;
+  const cl=learnedCount;
+
+  modeBtn.onclick=()=>{
+    mode=mode==='EN_RU'?'RU_EN':'EN_RU';
+    localStorage.setItem(LS_MODE,mode);
+    render();
+  };
+
+  saveVaultBtn.onclick=()=>{
+    vault=parse(tv.value);
+    save(LS_VAULT,vault);
+    sync();
+    setMsg('Сохранено ✅','ok');
+  };
+
+  newBtn.onclick=()=>{
+    if(active.length) learned=[...learned,...active];
+    active=shuffle(vault).slice(0,BATCH);
+    vault=vault.slice(active.length);
+    save(LS_ACTIVE,active);
+    save(LS_VAULT,vault);
+    save(LS_LEARNED,learned);
+    start();
+  };
+
+  repeatBtn.onclick=()=>{
+    active=shuffle(learned).slice(0,BATCH);
+    learned=learned.slice(active.length);
+    save(LS_ACTIVE,active);
+    save(LS_LEARNED,learned);
+    start();
+  };
+
+  skipBtn.onclick=()=>next();
+
+  clearLearnedBtn.onclick=()=>{
+    learned=[];
+    save(LS_LEARNED,learned);
+    sync();
+    setMsg('Очищено','ok');
+  };
+
+  function start(){
+    if(active.length<4){
+      q.textContent='—';
+      a.innerHTML='';
+      return;
+    }
+    deck=shuffle([...Array(active.length).keys()]);
+    pos=0;
+    current=active[deck[pos]];
+    render();
+  }
+
+  function render(){
+    sync();
+    if(!current)return;
+    const question=mode==='EN_RU'?current.en:current.ru;
+    const correct=mode==='EN_RU'?current.ru:current.en;
+    q.textContent=question;
+    h.textContent=mode==='EN_RU'?'Выбери перевод':'Choose translation';
+
+    const wrongs=shuffle(
+      active.filter(x=>x!==current)
+            .map(x=>mode==='EN_RU'?x.ru:x.en)
+    ).slice(0,3);
+
+    a.innerHTML='';
+    shuffle([correct,...wrongs]).forEach(opt=>{
+      const b=document.createElement('button');
+      b.className='btn';
+      b.textContent=opt;
+      b.onclick=()=>{
+        if(opt===correct){
+          setMsg('Молодец ✅','ok');
+          setTimeout(next,350);
+        }else{
+          setMsg('Неправильно ❌ '+correct,'bad');
+        }
+      };
+      a.appendChild(b);
+    });
+  }
+
+  function next(){
+    pos++;
+    if(pos>=deck.length){ start(); return; }
+    current=active[deck[pos]];
+    render();
+  }
+
+  function sync(){
+    tv.value=vault.map(x=>`${x.en} - ${x.ru}`).join('\n');
+    tl.value=learned.map(x=>`${x.en} - ${x.ru}`).join('\n');
+    cv.textContent='('+vault.length+')';
+    cl.textContent='('+learned.length+')';
+  }
+
+  function parse(t){
+    return t.split('\n').map(l=>{
+      const i=l.indexOf('-');
+      if(i<0)return null;
+      return {en:l.slice(0,i).trim(),ru:l.slice(i+1).trim()};
+    }).filter(Boolean);
+  }
+
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  function setMsg(text,type){
+    m.textContent=text;
+    m.className='msg '+(type||'');
+  }
+
+  sync();
+  start();
+})();
+</script>
+</body>
+</html>
